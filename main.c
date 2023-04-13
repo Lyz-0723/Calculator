@@ -2,19 +2,29 @@
 #include <ctype.h>
 #include <math.h>
 
-#define MAXSIZE 100
 #define T 1000000
+#define L (T/3)
+
+// Define
+typedef struct {
+    double value;
+    int errorCode;
+} output;
 
 typedef struct {
-    double stk[MAXSIZE];
+    double stk[L];
     int top;
 } stack;
 
 typedef struct {
-    double values[MAXSIZE];
+    double values[L];
     int front;
     int rear;
 } queue;
+
+
+// Declare
+output result;
 
 stack operators;
 queue postfix;
@@ -31,7 +41,7 @@ double pop(stack *);
 
 double top(stack *);
 
-void display_s(stack *);
+int stackIsEmpty(stack *);
 
 void reset_stack(stack *);
 
@@ -41,8 +51,6 @@ void enqueue(double);
 double dequeue();
 
 int postfixIsEmpty();
-
-void display_q();
 
 void reset_queue();
 
@@ -54,20 +62,23 @@ double opCalculate(double, double, double);
 
 int opToNum(char);
 
+void exception_handling(int);
+
 int main(void) {
 
-    char expressions[T];
-    int expn_length[T / 3];
+    char expressions[T]; // 一維陣列存放所有expression
+    int expn_length[L]; // 存放每個expression長度
     char *pExpression = expressions;
 
     int ch;
     int lengthCount = 0, i = 0, j = 0;
 
-    printf("Enter the expressions (press ctrl+Z/control+D to stop)\n");
+    printf("Enter the expressions (press ctrl+Z/control+D to stop)\n"); // 修改
     printf("%d: ", j + 1);
 
+    // get the user input
     while ((ch = getchar()) != EOF) {
-        if (isspace(ch)) {
+        if (ch == '\n') {
             printf("%d: ", j + 2);
             expn_length[j++] = lengthCount;
             lengthCount = 0;
@@ -86,11 +97,19 @@ int main(void) {
         reset_stack(pOperands);
         reset_queue();
 
-        length = expn_length[pos];
+        length = expn_length[pos++];
 
         transfer(pExpression, length);
-        printf("expression %d = %.13lf\n", ++pos, calculate());
+        result.value = calculate();
         pExpression += length;
+
+        // exception handling
+        if (result.errorCode) {
+            exception_handling(pos);
+            continue;
+        }
+
+        printf("Expression %d = %.13lf\n", pos, result.value);
     }
 }
 
@@ -99,37 +118,45 @@ void transfer(const char *expression, int length) {
     int pos = 0; // expression position
     int number = -1; // initialize with -1
 
-    // 如果到字串結尾(\0)就停止迴圈
+    int parentheses = 0;
+
     for (int i = 0; i < length; i++) {
-//    while (expression[pos] != '\0') {
-        char now = *(expression + pos++);
+        char now = *(expression + pos++); // 當前位置的值
 
         // digit -> store them in temp number
         if (isdigit(now)) {
             if (number == -1) number = 0; // 如果number為初始值-1就將number設為0(讓後面能計算總數值)
-            number = number * 10 + ((int) now - 48); // 12 = 1*10 + (int) '2' - 48
+            number = number * 10 + ((int) now - 48); // 12 = 1 * 10 + (int) '2' - 48
             continue;
         }
+
+        // use a negative number to represent an operator
+        // ignore invalid operator
+        int symbol_value = opToNum(now);
+        if (symbol_value == 0) continue;
 
         // 確保不會重複存值
         if (number >= 0) enqueue(number);
         number = -1;
 
-        // parentheses ()
-        if (now == '(') {
+        // left parentheses -> (
+        if (symbol_value == -41) {
+            parentheses++;
+
             push(-1, pOperators);
             continue;
         }
 
-        if (now == ')') {
-            while (top(pOperators) != -1)
+        // right parentheses -> )
+        if (symbol_value == -42) {
+            parentheses--;
+
+            while (top(pOperators) != -1 && !stackIsEmpty(pOperators))
                 enqueue(pop(pOperators));
+
             pop(pOperators);
             continue;
         }
-
-        // use a negative number to represent an operator
-        int symbol_value = opToNum(now);
 
         // compare the value to decide precedence
         while ((int) (top(pOperators) / 10) <= (int) (symbol_value / 10))
@@ -137,11 +164,14 @@ void transfer(const char *expression, int length) {
 
         push(symbol_value, pOperators);
     }
+
     // 將剩下的數字跟運算子存入queue中
     if (number >= 0)
         enqueue(number);
-    while (operators.top != -1)
+    while (!stackIsEmpty(pOperators))
         enqueue(pop(pOperators));
+
+    result.errorCode = parentheses ? 1 : 0;
 }
 
 double calculate() {
@@ -158,23 +188,23 @@ double calculate() {
     return pop(pOperands);
 }
 
-double opCalculate(double operand1, double operand2, double operator) {
+double opCalculate(double op1, double op2, double operator) {
     if (operator == -11)
-        return operand1 + operand2;
+        return op1 + op2;
     if (operator == -12)
-        return operand1 - operand2;
+        return op1 - op2;
     if (operator == -21)
-        return operand1 * operand2;
+        return op1 * op2;
     if (operator == -22) {
-        if (operand2 == 0) // return operand1 if operand2 equals 0
-            return operand1;
-        return (double) operand1 / operand2;
+        // return error if divisor equals 0
+        if (op2 == 0) result.errorCode = 2;
+        return op1 / op2;
     }
     if (operator == -23)
-        return (int) operand1 % (int) operand2;
+        return fmod(op1, op2);
     if (operator == -31)
-        return pow(operand1, operand2);
-    return 0;
+        return pow(op1, op2);
+    return op1;
 }
 
 int opToNum(char op) {
@@ -190,6 +220,10 @@ int opToNum(char op) {
         return -23;
     if (op == '^')
         return -31;
+    if (op == '(')
+        return -41;
+    if (op == ')')
+        return -42;
     return 0;
 }
 
@@ -200,16 +234,17 @@ void push(double elem, stack *pS) {
 }
 
 double pop(stack *pS) {
-    return (*pS).stk[(*pS).top--];
+    if (!stackIsEmpty(pS))
+        return (*pS).stk[(*pS).top--];
+    return 0;
 }
 
 double top(stack *pS) {
     return (*pS).stk[(*pS).top];
 }
 
-void display_s(stack *pS) {
-    for (int i = (*pS).top; i >= 0; i--)
-        printf("%lf ", (*pS).stk[i]);
+int stackIsEmpty(stack *pS) {
+    return (*pS).top == -1;
 }
 
 /* Queue Function */
@@ -226,15 +261,6 @@ int postfixIsEmpty() {
     return postfix.front == postfix.rear;
 }
 
-void display_q() {
-    int begin = postfix.front + 1;
-    while (begin <= postfix.rear) {
-        printf("%lf ", postfix.values[begin]);
-        begin += 1;
-    }
-    printf("\n");
-}
-
 /* Reset */
 
 void reset_stack(stack *pS) {
@@ -245,3 +271,12 @@ void reset_queue() {
     postfix.rear = -1;
     postfix.front = -1;
 }
+
+void exception_handling(int line) {
+    if (result.errorCode == 1)
+        printf("Error(line %d): You should enter a pair of parentheses.\n", line);
+    if (result.errorCode == 2)
+        printf("Error(line %d): The divisor should not be zero.\n", line);
+    result.errorCode = 0;
+}
+
