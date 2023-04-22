@@ -38,6 +38,8 @@ void push(double, stack *);
 
 double pop(stack *);
 
+double top(stack *);
+
 int stackIsEmpty(stack *);
 
 void reset_stack(stack *);
@@ -146,7 +148,7 @@ void transfer(const char *expression, int length) {
         number = -1;                            // Reset number value
 
         // Left parentheses -> (
-        if (symbol_value == -41) {
+        if (now == '(') {
             parentheses++;
 
             push(-1, pOperators);
@@ -154,10 +156,12 @@ void transfer(const char *expression, int length) {
         }
 
         // Right parentheses -> )
-        if (symbol_value == -42) {
+        if (now == ')') {
             parentheses--;
 
-            while (operators.top != -1)
+            // When top value of operator stack is -1 (stand for '(') or
+            // stack is empty, it will stop enqueue the value into postfix queue
+            while (top(pOperators) != -1 && !stackIsEmpty(pOperators))
                 enqueue(pop(pOperators));
 
             pop(pOperators);
@@ -166,7 +170,7 @@ void transfer(const char *expression, int length) {
 
         // Tens digit of symbol value stands for precedence,
         // so divided the value by 10 to decide precedence
-        while ((int) (operators.top / 10) <= (int) (symbol_value / 10))
+        while ((int) (top(pOperators) / 10) <= (int) (symbol_value / 10))
             enqueue(pop(pOperators));
 
         push(symbol_value, pOperators);
@@ -197,6 +201,8 @@ double calculate() {
         double opd1 = pop(pOperands);
         push(opCalculate(opd1, opd2, now), pOperands);
     }
+    if (operands.top != 0)
+        result.errorCode = 3;
     return pop(pOperands);
 }
 
@@ -251,6 +257,8 @@ void exception_handling(int line) {
         printf("Error(line %d): You should enter a pair of parentheses.\n", line);
     if (result.errorCode == 2)
         printf("Error(line %d): The divisor should not be zero.\n", line);
+    if (result.errorCode == 3)
+        printf("Error(line %d): Illegal expression.\n", line);
     result.errorCode = 0;
 }
 
@@ -264,6 +272,10 @@ double pop(stack *pS) {
     if (!stackIsEmpty(pS))
         return (*pS).stk[(*pS).top--];
     return 0;
+}
+
+double top(stack *pS) {
+    return (*pS).stk[(*pS).top];
 }
 
 int stackIsEmpty(stack *pS) {
