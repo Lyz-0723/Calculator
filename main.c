@@ -2,22 +2,21 @@
 #include <ctype.h>
 #include <math.h>
 
-#define T 1000000
-#define L (T/3)
-
 // Define
+#define LT 1000000
+
 typedef struct {
     double value;
     int errorCode;
 } output;
 
 typedef struct {
-    double stk[L];
+    double stk[LT];
     int top;
 } stack;
 
 typedef struct {
-    double values[L];
+    double values[LT];
     int front;
     int rear;
 } queue;
@@ -39,8 +38,6 @@ void push(double, stack *);
 
 double pop(stack *);
 
-double top(stack *);
-
 int stackIsEmpty(stack *);
 
 void reset_stack(stack *);
@@ -54,6 +51,7 @@ int postfixIsEmpty();
 
 void reset_queue();
 
+// Calculate
 void transfer(const char *, int);
 
 double calculate();
@@ -62,21 +60,24 @@ double opCalculate(double, double, double);
 
 int opToNum(char);
 
+// Exception
 void exception_handling(int);
 
 int main(void) {
 
-    char expressions[T]; // 一維陣列存放所有expression
-    int expn_length[L]; // 存放每個expression長度
-    char *pExpression = expressions;
+    char expressions[LT];
+    int expn_length[LT];             // Length of each expression
+    char *pExpression = expressions; // Pointer of expression array
 
+
+    /* ---------- Stores expressions ---------- */
     int ch;
     int lengthCount = 0, i = 0, j = 0;
 
-    printf("Enter the expressions (press ctrl+Z/control+D to stop)\n"); // 修改
+    printf("Enter the expressions (press ctrl+Z/control+D to stop)\n");
     printf("%d: ", j + 1);
 
-    // get the user input
+    // Get user input until EOF (End Of File)
     while ((ch = getchar()) != EOF) {
         if (ch == '\n') {
             printf("%d: ", j + 2);
@@ -88,22 +89,29 @@ int main(void) {
         lengthCount++;
         expressions[i++] = (char) ch;
     }
-
     printf("\n---\n");
 
+
+    /* ------ Gets each expression result ------ */
     int length, pos = 0;
     while (*pExpression != '\0') {
+
+        // Reset stacks and queue
         reset_stack(pOperators);
         reset_stack(pOperands);
         reset_queue();
 
         length = expn_length[pos++];
 
+        // Transfer each expression into postfix format
+        // then calculate value and store in result
         transfer(pExpression, length);
         result.value = calculate();
+
+        // Point to next expression
         pExpression += length;
 
-        // exception handling
+        // Handle exception if it's exist
         if (result.errorCode) {
             exception_handling(pos);
             continue;
@@ -113,33 +121,31 @@ int main(void) {
     }
 }
 
+//
 void transfer(const char *expression, int length) {
 
-    int pos = 0; // expression position
-    int number = -1; // initialize with -1
+    int pos = 0;         // Current position in expression
+    int number = -1;     // Stand for each number in expression, initialize with -1
+    int parentheses = 0; // Count for parentheses (left: +1, right: -1)
 
-    int parentheses = 0;
 
     for (int i = 0; i < length; i++) {
-        char now = *(expression + pos++); // 當前位置的值
+        char now = *(expression + pos++);
 
-        // digit -> store them in temp number
+        // Digit -> Store in temp number
         if (isdigit(now)) {
-            if (number == -1) number = 0; // 如果number為初始值-1就將number設為0(讓後面能計算總數值)
-            number = number * 10 + ((int) now - 48); // 12 = 1 * 10 + (int) '2' - 48
+            if (number == -1) number = 0;
+            number = number * 10 + ((int) now - 48);
             continue;
         }
 
-        // use a negative number to represent an operator
-        // ignore invalid operator
         int symbol_value = opToNum(now);
-        if (symbol_value == 0) continue;
+        if (symbol_value == 0) continue;        // Ignore invalid operator
 
-        // 確保不會重複存值
-        if (number >= 0) enqueue(number);
-        number = -1;
+        if (number >= 0) enqueue(number);  // Store the number except init value
+        number = -1;                            // Reset number value
 
-        // left parentheses -> (
+        // Left parentheses -> (
         if (symbol_value == -41) {
             parentheses++;
 
@@ -147,40 +153,46 @@ void transfer(const char *expression, int length) {
             continue;
         }
 
-        // right parentheses -> )
+        // Right parentheses -> )
         if (symbol_value == -42) {
             parentheses--;
 
-            while (top(pOperators) != -1 && !stackIsEmpty(pOperators))
+            while (operators.top != -1)
                 enqueue(pop(pOperators));
 
             pop(pOperators);
             continue;
         }
 
-        // compare the value to decide precedence
-        while ((int) (top(pOperators) / 10) <= (int) (symbol_value / 10))
+        // Tens digit of symbol value stands for precedence,
+        // so divided the value by 10 to decide precedence
+        while ((int) (operators.top / 10) <= (int) (symbol_value / 10))
             enqueue(pop(pOperators));
 
         push(symbol_value, pOperators);
     }
 
-    // 將剩下的數字跟運算子存入queue中
+    // Put the rest number and operators in queue
     if (number >= 0)
         enqueue(number);
     while (!stackIsEmpty(pOperators))
         enqueue(pop(pOperators));
 
+    // Set errorCode as 1 if numbers of left parentheses not equal to right one
     result.errorCode = parentheses ? 1 : 0;
 }
 
+// Calculates the expression stored in postfix queue
 double calculate() {
     while (!postfixIsEmpty()) {
         double now = dequeue();
+
+        // Digit -> Store in operands stack
         if (now >= 0) {
             push(now, pOperands);
             continue;
         }
+
         double opd2 = pop(pOperands);
         double opd1 = pop(pOperands);
         push(opCalculate(opd1, opd2, now), pOperands);
@@ -188,6 +200,7 @@ double calculate() {
     return pop(pOperands);
 }
 
+// Calculates value by operator
 double opCalculate(double op1, double op2, double operator) {
     if (operator == -11)
         return op1 + op2;
@@ -196,7 +209,7 @@ double opCalculate(double op1, double op2, double operator) {
     if (operator == -21)
         return op1 * op2;
     if (operator == -22) {
-        // return error if divisor equals 0
+        // Return error if divisor equals 0
         if (op2 == 0) result.errorCode = 2;
         return op1 / op2;
     }
@@ -207,6 +220,10 @@ double opCalculate(double op1, double op2, double operator) {
     return op1;
 }
 
+// Transforms the operators into number.
+// Each operator is presented by a negative,
+// tens digit of the number stands for its precedence,
+// and unit digit is its id.
 int opToNum(char op) {
     if (op == '+')
         return -11;
@@ -224,7 +241,17 @@ int opToNum(char op) {
         return -41;
     if (op == ')')
         return -42;
+    // Invalid operator return 0
     return 0;
+}
+
+// Print out the error message
+void exception_handling(int line) {
+    if (result.errorCode == 1)
+        printf("Error(line %d): You should enter a pair of parentheses.\n", line);
+    if (result.errorCode == 2)
+        printf("Error(line %d): The divisor should not be zero.\n", line);
+    result.errorCode = 0;
 }
 
 /* Stack Function */
@@ -237,10 +264,6 @@ double pop(stack *pS) {
     if (!stackIsEmpty(pS))
         return (*pS).stk[(*pS).top--];
     return 0;
-}
-
-double top(stack *pS) {
-    return (*pS).stk[(*pS).top];
 }
 
 int stackIsEmpty(stack *pS) {
@@ -271,12 +294,3 @@ void reset_queue() {
     postfix.rear = -1;
     postfix.front = -1;
 }
-
-void exception_handling(int line) {
-    if (result.errorCode == 1)
-        printf("Error(line %d): You should enter a pair of parentheses.\n", line);
-    if (result.errorCode == 2)
-        printf("Error(line %d): The divisor should not be zero.\n", line);
-    result.errorCode = 0;
-}
-
